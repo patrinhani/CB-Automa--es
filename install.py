@@ -9,7 +9,7 @@ def install_or_update_package(package):
         print(f"❌ Erro ao instalar/atualizar {package}")
 
 # Lista de pacotes para instalar
-packages = ["numpy", "scikit-learn"]
+packages = ["numpy", "scikit-learn", "openai"]
 
 for package in packages:
     install_or_update_package(package)
