@@ -15,7 +15,7 @@ regex_data = re.compile(r'(\d{2}-\d{2}-\d{4})')
 
 # Criando interface
 root = ttk.Window(themename="darkly")
-root.title("📂 Renomeador Inteligente")
+root.title("📂 Renomeador ")
 root.geometry("950x550")
 
 diretorio = ttk.StringVar()
@@ -32,9 +32,12 @@ entry_diretorio.pack(side=LEFT, padx=5)
 
 def selecionar_pasta():
     """Seleciona a pasta e reseta corretamente o caminho."""
-    pasta = filedialog.askdirectory()
-    if pasta:
-        diretorio.set(pasta)
+    try:
+        pasta = filedialog.askdirectory()
+        if pasta:
+            diretorio.set(pasta)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao selecionar pasta: {e}")
 
 ttk.Button(frame_topo, text="Selecionar", bootstyle=PRIMARY, command=selecionar_pasta).pack(side=LEFT, padx=5)
 
@@ -49,6 +52,9 @@ botao_analisar.pack(side=LEFT, padx=10)
 botao_renomear = ttk.Button(frame_botoes, text="✏️ Renomear Arquivos", bootstyle=SUCCESS, 
                             command=lambda: threading.Thread(target=renomear_arquivos).start(), state=DISABLED)
 botao_renomear.pack(side=LEFT, padx=10)
+
+# Adicionando botão para sair do programa
+ttk.Button(frame_botoes, text="❌ Sair", bootstyle=DANGER, command=root.destroy).pack(side=LEFT, padx=10)
 
 label_status = ttk.Label(root, text="🔹 Selecione uma pasta para começar", font=("Arial", 10, "bold"), foreground="white")
 label_status.pack(pady=5)
@@ -142,42 +148,58 @@ def listar_arquivos():
         messagebox.showerror("Erro", "Pasta inválida ou inexistente!")
         return
 
-    botao_analisar.config(state=DISABLED)
-    botao_renomear.config(state=DISABLED)
-    label_status.config(text="🔄 Analisando...", foreground="yellow")
-    lista_arquivos.delete(*lista_arquivos.get_children())
+    try:
+        botao_analisar.config(state=DISABLED)
+        botao_renomear.config(state=DISABLED)
+        label_status.config(text="🔄 Analisando...", foreground="yellow")
+        lista_arquivos.delete(*lista_arquivos.get_children())
 
-    count_corretos.set(0)
-    count_ajustar.set(0)
+        count_corretos.set(0)
+        count_ajustar.set(0)
 
-    arquivos = [f for f in os.listdir(pasta) if os.path.isfile(os.path.join(pasta, f))]
-    parte_fixa = detectar_padroes(arquivos)
+        arquivos = [f for f in os.listdir(pasta) if os.path.isfile(os.path.join(pasta, f))]
+        if not arquivos:
+            label_status.config(text="⚠️ Nenhum arquivo encontrado na pasta!", foreground="orange")
+            botao_analisar.config(state=NORMAL)
+            return
 
-    for arquivo in arquivos:
-        nome_corrigido, problemas = corrigir_nome(arquivo, parte_fixa)
-        if nome_corrigido and nome_corrigido != arquivo:
-            lista_arquivos.insert("", "end", values=(arquivo, f"🟡 {nome_corrigido} ({', '.join(problemas)})"), tags=("ajustar",))
-            count_ajustar.set(count_ajustar.get() + 1)
-        else:
-            lista_arquivos.insert("", "end", values=(arquivo, "✅ Correto"), tags=("correto",))
-            count_corretos.set(count_corretos.get() + 1)
+        parte_fixa = detectar_padroes(arquivos)
 
-    label_status.config(text="✅ Análise concluída!", foreground="lightgreen")
-    botao_renomear.config(state=NORMAL)
-    botao_analisar.config(state=NORMAL)
+        for arquivo in arquivos:
+            nome_corrigido, problemas = corrigir_nome(arquivo, parte_fixa)
+            if nome_corrigido and nome_corrigido != arquivo:
+                lista_arquivos.insert("", "end", values=(arquivo, f"🟡 {nome_corrigido} ({', '.join(problemas)})"), tags=("ajustar",))
+                count_ajustar.set(count_ajustar.get() + 1)
+            else:
+                lista_arquivos.insert("", "end", values=(arquivo, "✅ Correto"), tags=("correto",))
+                count_corretos.set(count_corretos.get() + 1)
+
+        label_status.config(text="✅ Análise concluída!", foreground="lightgreen")
+        botao_renomear.config(state=NORMAL)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao listar arquivos: {e}")
+    finally:
+        botao_analisar.config(state=NORMAL)
 
 def renomear_arquivos():
     """Renomeia os arquivos conforme a análise."""
     pasta = diretorio.get().strip()
 
     if not pasta or not os.path.exists(pasta):
-        
         messagebox.showerror("Erro", "Pasta inválida ou inexistente!")
         return
 
-    for item in lista_arquivos.get_children():
-        nome_atual, status = lista_arquivos.item(item, "values")
-        if "🟡" in status:
-            os.rename(os.path.join(pasta, nome_atual), os.path.join(pasta, status.split(" ")[1]))
+    try:
+        for item in lista_arquivos.get_children():
+            nome_atual, status = lista_arquivos.item(item, "values")
+            if "🟡" in status:
+                novo_nome = status.split(" ")[1]
+                try:
+                    os.rename(os.path.join(pasta, nome_atual), os.path.join(pasta, novo_nome))
+                except Exception as e:
+                    messagebox.showerror("Erro", f"Erro ao renomear '{nome_atual}': {e}")
+        label_status.config(text="✅ Renomeação concluída!", foreground="lightgreen")
+    except Exception as e:
+        messagebox.showerror("Erro", f"Erro ao renomear arquivos: {e}")
 
 root.mainloop()

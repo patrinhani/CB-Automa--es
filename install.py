@@ -1,15 +1,31 @@
 import subprocess
 import sys
 
-def install_or_update_package(package):
+def uninstall_package(package):
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", package])
-        print(f"✅ {package} instalado/atualizado com sucesso!")
+        subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", package])
+        print(f"🗑️ {package} desinstalado com sucesso!")
     except subprocess.CalledProcessError:
-        print(f"❌ Erro ao instalar/atualizar {package}")
+        print(f"❌ Erro ao desinstalar {package}")
 
-# Lista de pacotes para instalar
-packages = ["numpy", "scikit-learn", "openai", "ttkbootstrap", "fitz", "selenium"]
+def install_package(package):
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        print(f"✅ {package} instalado com sucesso!")
+    except subprocess.CalledProcessError:
+        print(f"❌ Erro ao instalar {package}")
 
+# Lista de pacotes
+packages = ["numpy", "scikit-learn", "openai", "ttkbootstrap", "fitz", "pymupdf","selenium"]
+
+# Desinstalar pacotes
+print("\n🔻 Desinstalando pacotes...\n")
 for package in packages:
-    install_or_update_package(package)
+    uninstall_package(package)
+
+# Instalar pacotes novamente
+print("\n🔺 Instalando pacotes...\n")
+for package in packages:
+    install_package(package)
+
+print("\n🎯 Processo concluído!")
