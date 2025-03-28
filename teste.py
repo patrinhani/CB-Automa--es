@@ -30,7 +30,7 @@ def mudar_tema(event=None):
     janela.style.theme_use(temas_disponiveis[tema_atual])
 
 def exibir_loading():
-    """Cria uma janela independente de loading."""
+    """Cria uma janela independent de loading."""
     global janela_loading
     janela_loading = tk.Toplevel(janela)
     janela_loading.title("Processando...")

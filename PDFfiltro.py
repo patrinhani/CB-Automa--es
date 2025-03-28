@@ -6,21 +6,21 @@ import multiprocessing
 import threading
 import ttkbootstrap as ttk  # Biblioteca para tema moderno
 
-# === TEMAS DISPONÍVEIS  ===
+# === TEMAS DISPONÍVEIS ===
 temas_disponiveis = {
-    "🔥 Noite Cyberpunk": "cyborg",  
-    "🌞 Luz do Amanhã": "flatly",  
-    "🌑 Sombras Profundas": "darkly",  
-    "🦸 Herói Dourado": "superhero", 
-    "☀️ Crepúsculo Solar": "solar",  
-    "📜 Manuscrito Antigo": "journal",  
-    "🏝️ Areias Douradas": "sandstone", 
-    "🌊 Mar Profundo": "united",  
-    "🔮 Vibração Mística": "pulse",  
-    "👨‍🚀 Horizonte Cósmico": "cosmo",  
-    "⚡ Futurismo Elétrico": "morph"  
+    "🔥 Cyberpunk Noite": "cyborg",  
+    "🌞 Amanhecer Claro": "flatly",  
+    "🌑 Escuridão Profunda": "darkly",  
+    "🦸 Herói Moderno": "superhero", 
+    "☀️ Solar Elegante": "solar",  
+    "📜 Manuscrito Clássico": "journal",  
+    "🏝️ Praia Dourada": "sandstone", 
+    "🌊 Oceano Sereno": "united",  
+    "🔮 Misticismo Vibrante": "pulse",  
+    "👨‍🚀 Espaço Cósmico": "cosmo",  
+    "⚡ Futuro Elétrico": "morph"  
 }
-tema_atual = "🔥 Noite Cyberpunk"  # Nome  inicial
+tema_atual = "🔥 Cyberpunk Noite"  # Nome inicial
 
 def mudar_tema(event=None):
     """Altera o tema com base na seleção do combobox."""
