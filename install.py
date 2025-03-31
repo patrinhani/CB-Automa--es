@@ -3,7 +3,7 @@ import sys
 
 def uninstall_package(package):
     try:
-        subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", package])
+        subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", package,"pathlib"])
         print(f"🗑️ {package} desinstalado com sucesso!")
     except subprocess.CalledProcessError:
         print(f"❌ Erro ao desinstalar {package}")
@@ -16,7 +16,7 @@ def install_package(package):
         print(f"❌ Erro ao instalar {package}")
 
 # Lista de pacotes
-packages = ["numpy", "scikit-learn", "openai", "ttkbootstrap", "fitz", "pymupdf","selenium"]
+packages = ["numpy", "scikit-learn", "openai", "ttkbootstrap", "fitz", "pymupdf","selenium", "pyinstaller"]
 
 # Desinstalar pacotes
 print("\n🔻 Desinstalando pacotes...\n")
