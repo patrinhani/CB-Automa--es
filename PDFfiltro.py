@@ -1,10 +1,11 @@
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
-import fitz  # PyMuPDF para leitura rápida de PDFs
+import fitz  # PyMuPDF
 import multiprocessing
 import threading
 import ttkbootstrap as ttk  # Biblioteca para tema moderno
+from collections import defaultdict
 
 # === TEMAS DISPONÍVEIS ===
 temas_disponiveis = {
@@ -23,13 +24,11 @@ temas_disponiveis = {
 tema_atual = "🔥 Cyberpunk Noite"  # Nome inicial
 
 def mudar_tema(event=None):
-    """Altera o tema com base na seleção do combobox."""
     global tema_atual
     tema_atual = combobox_temas.get()
     janela.style.theme_use(temas_disponiveis[tema_atual])
 
 def exibir_loading():
-    """Cria uma janela independente de loading."""
     global janela_loading
     janela_loading = tk.Toplevel(janela)
     janela_loading.title("Processando...")
@@ -42,38 +41,35 @@ def exibir_loading():
     janela_loading.protocol("WM_DELETE_WINDOW", lambda: None)
 
 def fechar_loading():
-    """Fecha a janela de loading."""
     if janela_loading:
         janela_loading.destroy()
 
-def processar_pdf(pdf_path, termo_busca, pasta_saida):
-    """Processa um único PDF e filtra páginas que contêm o termo de busca."""
-    try:
-        doc = fitz.open(pdf_path)
-        pdf_writer = fitz.open()
-        paginas_filtradas = []
+def processar_pdfs(pdfs_por_pasta, termo_busca, pasta_saida):
+    for pasta, arquivos in pdfs_por_pasta.items():
+        try:
+            pdf_writer = fitz.open()
+            paginas_filtradas = []
 
-        for num_pagina in range(len(doc)):
-            texto = doc[num_pagina].get_text("text", flags=fitz.TEXTFLAGS_TEXT)
-            if termo_busca in texto:
-                pdf_writer.insert_pdf(doc, from_page=num_pagina, to_page=num_pagina)
-                paginas_filtradas.append(num_pagina + 1)
+            for pdf_path in arquivos:
+                doc = fitz.open(pdf_path)
+                for num_pagina in range(len(doc)):
+                    texto = doc[num_pagina].get_text("text", flags=fitz.TEXTFLAGS_TEXT)
+                    if termo_busca in texto:
+                        pdf_writer.insert_pdf(doc, from_page=num_pagina, to_page=num_pagina)
+                        paginas_filtradas.append(num_pagina + 1)
+                doc.close()
 
-        if paginas_filtradas:
-            nome_pasta = os.path.basename(os.path.dirname(pdf_path))
-            nome_base = os.path.splitext(os.path.basename(pdf_path))[0]
-            nome_arquivo = f"{nome_pasta}_{nome_base}_filtrado.pdf"
-            caminho_saida = os.path.join(pasta_saida, nome_arquivo)
-            pdf_writer.save(caminho_saida)
-            print(f"[✅] Salvo: {caminho_saida} (Páginas: {paginas_filtradas})")
-
-        doc.close()
-        pdf_writer.close()
-    except Exception as e:
-        print(f"[❌] Erro ao processar {pdf_path}: {e}")
+            if paginas_filtradas:
+                nome_pasta = os.path.basename(pasta)
+                nome_arquivo = f"{nome_pasta}_filtrado.pdf"
+                caminho_saida = os.path.join(pasta_saida, nome_arquivo)
+                pdf_writer.save(caminho_saida)
+                print(f"[✅] Salvo: {caminho_saida} (Páginas: {paginas_filtradas})")
+            pdf_writer.close()
+        except Exception as e:
+            print(f"[❌] Erro ao processar PDFs em {pasta}: {e}")
 
 def buscar_em_multiplos_pdfs():
-    """Inicia a busca nos arquivos PDF selecionados."""
     termo = entrada_numero.get().strip()
     pasta_saida = entrada_saida.get().strip()
     arquivos_pdf = lista_pdfs.get(0, tk.END)
@@ -86,15 +82,13 @@ def buscar_em_multiplos_pdfs():
         messagebox.showwarning("Aviso", "Nenhum arquivo PDF selecionado.")
         return
 
-    def executar():
-        processos = []
-        for pdf in arquivos_pdf:
-            p = multiprocessing.Process(target=processar_pdf, args=(pdf, termo, pasta_saida))
-            processos.append(p)
-            p.start()
+    pdfs_por_pasta = defaultdict(list)
+    for pdf in arquivos_pdf:
+        pasta = os.path.dirname(pdf)
+        pdfs_por_pasta[pasta].append(pdf)
 
-        for p in processos:
-            p.join()
+    def executar():
+        processar_pdfs(pdfs_por_pasta, termo, pasta_saida)
         fechar_loading()
         messagebox.showinfo("Concluído", "Todos os PDFs foram processados!")
 
@@ -103,7 +97,6 @@ def buscar_em_multiplos_pdfs():
     thread.start()
 
 def selecionar_pdfs():
-    """Abre a janela para seleção de múltiplos PDFs."""
     arquivos = filedialog.askopenfilenames(filetypes=[("Arquivos PDF", "*.pdf")])
     if arquivos:
         for arquivo in arquivos:
@@ -111,7 +104,6 @@ def selecionar_pdfs():
                 lista_pdfs.insert(tk.END, arquivo)
 
 def remover_pdf():
-    """Remove o arquivo PDF selecionado da lista."""
     try:
         selecionado = lista_pdfs.curselection()[0]
         lista_pdfs.delete(selecionado)
@@ -119,7 +111,6 @@ def remover_pdf():
         messagebox.showwarning("Aviso", "Selecione um arquivo para remover.")
 
 def salvar_em():
-    """Abre a janela para selecionar a pasta de saída dos PDFs processados."""
     pasta = filedialog.askdirectory()
     if pasta:
         entrada_saida.delete(0, tk.END)
@@ -137,7 +128,6 @@ frame_superior = ttk.Frame(janela)
 frame_superior.pack(fill="x", pady=5)
 ttk.Label(frame_superior, text="📄 Filtro de PDFs", font=("Arial", 14, "bold")).pack(side="left", padx=10)
 
-# === SELEÇÃO DE TEMA ===
 frame_tema = ttk.Frame(janela)
 frame_tema.pack(pady=5)
 ttk.Label(frame_tema, text="🎨 Escolha um tema:", font=("Arial", 12)).pack(side="left", padx=5)
@@ -146,36 +136,34 @@ combobox_temas.pack(side="left", padx=5)
 combobox_temas.set(tema_atual)
 combobox_temas.bind("<<ComboboxSelected>>", mudar_tema)
 
-ttk.Label(janela, text="📂 Escolha múltiplos PDFs:", font=("Arial", 12)).pack(pady=5)
-
 frame_lista = ttk.Frame(janela)
 frame_lista.pack(pady=5, padx=10, fill="both", expand=True)
-
 scrollbar = ttk.Scrollbar(frame_lista, orient="vertical")
-lista_pdfs = tk.Listbox(frame_lista, height=8, width=70, bg="#2b2b2b", fg="white", selectbackground="#007acc")
+lista_pdfs = tk.Listbox(frame_lista, height=8, width=70)
 lista_pdfs.pack(side=tk.LEFT, fill="both", expand=True)
 scrollbar.pack(side=tk.RIGHT, fill="y")
 lista_pdfs.config(yscrollcommand=scrollbar.set)
 scrollbar.config(command=lista_pdfs.yview)
 
+frame_saida = ttk.Frame(janela)
+frame_saida.pack(pady=5, padx=10, fill="x")
+ttk.Label(frame_saida, text="📂 Pasta de saída:", font=("Arial", 12)).pack(side="left", padx=5)
+entrada_saida = ttk.Entry(frame_saida, width=50)
+entrada_saida.pack(side="left", padx=5)
+ttk.Button(frame_saida, text="Salvar em...", command=salvar_em).pack(side="left", padx=5)
+
+frame_termo = ttk.Frame(janela)
+frame_termo.pack(pady=5, padx=10, fill="x")
+ttk.Label(frame_termo, text="🔍 Termo de busca:", font=("Arial", 12)).pack(side="left", padx=5)
+entrada_numero = ttk.Entry(frame_termo, width=50)
+entrada_numero.pack(side="left", padx=5)
+
 frame_botoes = ttk.Frame(janela)
 frame_botoes.pack()
-ttk.Button(frame_botoes, text="Selecionar PDFs", command=selecionar_pdfs, width=20, bootstyle="primary").pack(side=tk.LEFT, padx=5)
-ttk.Button(frame_botoes, text="Remover Selecionado", command=remover_pdf, width=20, bootstyle="danger").pack(side=tk.LEFT, padx=5)
+ttk.Button(frame_botoes, text="Selecionar PDFs", command=selecionar_pdfs).pack(side=tk.LEFT, padx=5)
+ttk.Button(frame_botoes, text="Remover Selecionado", command=remover_pdf).pack(side=tk.LEFT, padx=5)
 
-ttk.Label(janela, text="🔎 Número exato para buscar:", font=("Arial", 12)).pack(pady=5)
-entrada_numero = ttk.Entry(janela, width=40)
-entrada_numero.pack(pady=5)
-
-ttk.Label(janela, text="💾 Pasta para salvar os PDFs:", font=("Arial", 12)).pack(pady=5)
-frame_saida = ttk.Frame(janela)
-frame_saida.pack(fill="x", padx=10)
-entrada_saida = ttk.Entry(frame_saida, width=45)
-entrada_saida.pack(side=tk.LEFT, fill="x", expand=True, padx=5)
-ttk.Button(frame_saida, text="Selecionar", command=salvar_em, width=15, bootstyle="secondary").pack(side=tk.LEFT)
-
-botao_buscar = ttk.Button(janela, text="📥 Buscar e Salvar PDFs 📤", command=buscar_em_multiplos_pdfs, width=30, bootstyle="success-outline")
-botao_buscar.pack(pady=20)
+ttk.Button(janela, text="📥 Buscar e Salvar PDFs 📤", command=buscar_em_multiplos_pdfs).pack(pady=20)
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
