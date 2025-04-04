@@ -87,10 +87,18 @@ def buscar_em_multiplos_pdfs():
         pasta = os.path.dirname(pdf)
         pdfs_por_pasta[pasta].append(pdf)
 
+    def mostrar_mensagem_temporaria():
+        msg = tk.Toplevel(janela)
+        msg.title("✅ Concluído")
+        msg.geometry("300x100")
+        msg.resizable(False, False)
+        ttk.Label(msg, text="Todos os PDFs foram processados!", font=("Arial", 11)).pack(pady=20)
+        msg.after(2000, msg.destroy)  # Fecha após 2 segundos
+
     def executar():
         processar_pdfs(pdfs_por_pasta, termo, pasta_saida)
         fechar_loading()
-        messagebox.showinfo("Concluído", "Todos os PDFs foram processados!")
+        mostrar_mensagem_temporaria()
 
     exibir_loading()
     thread = threading.Thread(target=executar)
