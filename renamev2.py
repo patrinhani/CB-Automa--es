@@ -21,10 +21,14 @@ def verificar_nome_arquivo(nome_arquivo):
     if tipo != "TERMO DE ÉTICA":
         erros.append(f"Erro no início: Deve começar com 'TERMO DE ÉTICA', mas veio '{tipo}'.")
 
-    # Verificar código (deve conter 1 ou 2 dígitos numéricos)
-    if not (codigo.isdigit() and len(codigo) in [1, 2]):
-        erros.append(f"Erro na segunda parte: '{codigo}' deve conter 1 ou 2 dígitos.")
-    
+    # 🔧 ALTERAÇÃO AQUI: garantir que o código tenha exatamente 2 dígitos
+    if not codigo.isdigit():
+        erros.append(f"Erro na segunda parte: '{codigo}' deve conter apenas números.")
+    elif len(codigo) != 2:
+        codigo_corrigido = codigo.zfill(2)
+        erros.append(f"Erro no código: '{codigo}' foi ajustado para '{codigo_corrigido}'.")
+        codigo = codigo_corrigido
+
     # Verificar matrícula
     if not matricula.isdigit() or len(matricula) != 8:
         erros.append(f"Erro na matrícula: '{matricula}' deve ter exatamente 8 dígitos.")
@@ -53,19 +57,19 @@ def verificar_nome_arquivo(nome_arquivo):
 # Função para verificar os arquivos na pasta
 def verificar_arquivos(diretorio, progress_var):
     resultados = []
-    arquivos_com_erro = 0  # Contador de arquivos com erro
+    arquivos_com_erro = 0
     arquivos = os.listdir(diretorio)
     total_arquivos = len(arquivos)
     for i, arquivo in enumerate(arquivos):
-        progress_var.set((i + 1) / total_arquivos * 100)  # Atualiza a barra de progresso
-        root.update_idletasks()  # Permite atualizar a interface enquanto executa
+        progress_var.set((i + 1) / total_arquivos * 100)
+        root.update_idletasks()
         caminho_arquivo = os.path.join(diretorio, arquivo)
         if os.path.isfile(caminho_arquivo):
             erros, nome_correto = verificar_nome_arquivo(arquivo)
             if erros:
-                arquivos_com_erro += 1  # Incrementa o contador de arquivos com erro
+                arquivos_com_erro += 1
                 resultados.append((arquivo, erros, nome_correto))
-    progress_var.set(100)  # Barra de progresso 100% após a verificação
+    progress_var.set(100)
     return resultados, arquivos_com_erro
 
 # Função para renomear os arquivos
@@ -74,9 +78,8 @@ def renomear_arquivos(diretorio, progress_var):
     arquivos = os.listdir(diretorio)
     total_arquivos = len(arquivos)
     for i, arquivo in enumerate(arquivos):
-        progress_var.set((i + 1) / total_arquivos * 100)  # Atualiza a barra de progresso
-        root.update_idletasks()  # Permite atualizar a interface enquanto executa
-
+        progress_var.set((i + 1) / total_arquivos * 100)
+        root.update_idletasks()
         caminho_arquivo = os.path.join(diretorio, arquivo)
         erros, nome_correto = verificar_nome_arquivo(arquivo)
         if erros:
@@ -86,7 +89,7 @@ def renomear_arquivos(diretorio, progress_var):
                 arquivos_renomeados += 1
             except Exception as e:
                 messagebox.showerror("Erro", f"Erro ao renomear '{arquivo}': {e}")
-    progress_var.set(100)  # Barra de progresso 100% após a renomeação
+    progress_var.set(100)
 
     if arquivos_renomeados > 0:
         messagebox.showinfo("Sucesso", f"{arquivos_renomeados} arquivo(s) renomeado(s) com sucesso!")
@@ -100,7 +103,7 @@ def verificar_thread():
         messagebox.showerror("Erro", "Por favor, selecione uma pasta com arquivos.")
         return
 
-    progress_var.set(0)  # Zera a barra de progresso antes de começar
+    progress_var.set(0)
     resultados, arquivos_com_erro = verificar_arquivos(diretorio, progress_var)
 
     text_resultados.delete("1.0", "end")
@@ -121,7 +124,7 @@ def renomear_thread():
         messagebox.showerror("Erro", "Por favor, selecione uma pasta com arquivos.")
         return
 
-    progress_var.set(0)  # Zera a barra de progresso antes de começar
+    progress_var.set(0)
     renomear_arquivos(diretorio, progress_var)
 
 # Função para iniciar a verificação em thread
@@ -141,11 +144,10 @@ def selecionar_diretorio():
         entry_diretorio.delete(0, "end")
         entry_diretorio.insert(0, diretorio)
 
-# Configuração da interface gráfica
+# Interface Gráfica
 root = Tk()
 root.title("Verificador de Arquivos")
 
-# Layout da interface
 label_diretorio = Button(root, text="Selecione a pasta com os arquivos", command=selecionar_diretorio)
 label_diretorio.pack(padx=10, pady=5)
 
@@ -158,12 +160,10 @@ button_verificar.pack(padx=10, pady=10)
 button_renomear = Button(root, text="Renomear Arquivos", command=iniciar_renomeacao)
 button_renomear.pack(padx=10, pady=10)
 
-# Barra de progresso
-progress_var = tk.DoubleVar()  # Agora usando tk.DoubleVar()
+progress_var = tk.DoubleVar()
 progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100, length=400)
 progress_bar.pack(padx=10, pady=10)
 
-# Área de resultados
 scrollbar = Scrollbar(root)
 scrollbar.pack(side="right", fill="y")
 
@@ -172,7 +172,6 @@ text_resultados.pack(padx=10, pady=5, fill="both", expand=True)
 
 scrollbar.config(command=text_resultados.yview)
 
-# Tamanho inicial da janela
 root.geometry("800x600")
 root.resizable(True, True)
 
