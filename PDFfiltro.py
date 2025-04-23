@@ -2,49 +2,51 @@ import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import fitz  # PyMuPDF
-import multiprocessing
 import threading
-import ttkbootstrap as ttk  # Biblioteca para tema moderno
+import queue
+import ttkbootstrap as ttk
 from collections import defaultdict
 
 # === TEMAS DISPONÍVEIS ===
-temas_disponiveis = {
-    "🔥 Cyberpunk Noite": "cyborg",  
-    "🌞 Amanhecer Claro": "flatly",  
-    "🌑 Escuridão Profunda": "darkly",  
-    "🦸 Herói Moderno": "superhero", 
-    "☀️ Solar Elegante": "solar",  
-    "📜 Manuscrito Clássico": "journal",  
-    "🏝️ Praia Dourada": "sandstone", 
-    "🌊 Oceano Sereno": "united",  
-    "🔮 Misticismo Vibrante": "pulse",  
-    "👨‍🚀 Espaço Cósmico": "cosmo",  
-    "⚡ Futuro Elétrico": "morph"  
+temas_disponíveis = {
+    "🔥 Cyberpunk Noite": "cyborg",
+    "🌞 Amanhecer Claro": "flatly",
+    "🌑 Escuridão Profunda": "darkly",
+    "🦸 Herói Moderno": "superhero",
+    "☀️ Solar Elegante": "solar",
+    "📜 Manuscrito Clássico": "journal",
+    "🏝️ Praia Dourada": "sandstone",
+    "🌊 Oceano Sereno": "united",
+    "🔮 Misticismo Vibrante": "pulse",
+    "👨‍🚀 Espaço Cósmico": "cosmo",
+    "⚡ Futuro Elétrico": "morph"
 }
-tema_atual = "🔥 Cyberpunk Noite"  # Nome inicial
+tema_atual = "🔥 Cyberpunk Noite"
 
+# === FUNÇÕES ===
 def mudar_tema(event=None):
     global tema_atual
     tema_atual = combobox_temas.get()
-    janela.style.theme_use(temas_disponiveis[tema_atual])
+    janela.style.theme_use(temas_disponíveis[tema_atual])
 
 def exibir_loading():
-    global janela_loading
+    global janela_loading, barra_progresso
     janela_loading = tk.Toplevel(janela)
     janela_loading.title("Processando...")
     janela_loading.geometry("300x150")
     janela_loading.resizable(False, False)
     ttk.Label(janela_loading, text="Processando PDFs...", font=("Arial", 12)).pack(pady=20)
-    barra = ttk.Progressbar(janela_loading, mode="indeterminate")
-    barra.pack(pady=10, padx=20, fill="x")
-    barra.start(10)
+    barra_progresso = ttk.Progressbar(janela_loading, mode="determinate", maximum=100)
+    barra_progresso.pack(pady=10, padx=20, fill="x")
     janela_loading.protocol("WM_DELETE_WINDOW", lambda: None)
 
 def fechar_loading():
     if janela_loading:
         janela_loading.destroy()
 
-def processar_pdfs(pdfs_por_pasta, termo_busca, pasta_saida):
+def processar_pdfs(pdfs_por_pasta, termo_busca, pasta_saida, fila):
+    total_pdfs = sum(len(arquivos) for arquivos in pdfs_por_pasta.values())
+    processados = 0
     for pasta, arquivos in pdfs_por_pasta.items():
         try:
             pdf_writer = fitz.open()
@@ -59,6 +61,10 @@ def processar_pdfs(pdfs_por_pasta, termo_busca, pasta_saida):
                         paginas_filtradas.append(num_pagina + 1)
                 doc.close()
 
+                processados += 1
+                progresso = int((processados / total_pdfs) * 100)
+                fila.put(progresso)
+
             if paginas_filtradas:
                 nome_pasta = os.path.basename(pasta)
                 nome_arquivo = f"{nome_pasta}_filtrado.pdf"
@@ -68,6 +74,7 @@ def processar_pdfs(pdfs_por_pasta, termo_busca, pasta_saida):
             pdf_writer.close()
         except Exception as e:
             print(f"[❌] Erro ao processar PDFs em {pasta}: {e}")
+    fila.put("done")
 
 def buscar_em_multiplos_pdfs():
     termo = entrada_numero.get().strip()
@@ -87,22 +94,34 @@ def buscar_em_multiplos_pdfs():
         pasta = os.path.dirname(pdf)
         pdfs_por_pasta[pasta].append(pdf)
 
+    fila = queue.Queue()
+
     def mostrar_mensagem_temporaria():
         msg = tk.Toplevel(janela)
         msg.title("✅ Concluído")
         msg.geometry("300x100")
         msg.resizable(False, False)
         ttk.Label(msg, text="Todos os PDFs foram processados!", font=("Arial", 11)).pack(pady=20)
-        msg.after(2000, msg.destroy)  # Fecha após 2 segundos
+        msg.after(2000, msg.destroy)
 
     def executar():
-        processar_pdfs(pdfs_por_pasta, termo, pasta_saida)
-        fechar_loading()
-        mostrar_mensagem_temporaria()
+        processar_pdfs(pdfs_por_pasta, termo, pasta_saida, fila)
+
+    def verificar_fila():
+        try:
+            while True:
+                valor = fila.get_nowait()
+                if valor == "done":
+                    fechar_loading()
+                    mostrar_mensagem_temporaria()
+                    return
+                barra_progresso['value'] = valor
+        except queue.Empty:
+            janela.after(100, verificar_fila)
 
     exibir_loading()
-    thread = threading.Thread(target=executar)
-    thread.start()
+    threading.Thread(target=executar, daemon=True).start()
+    verificar_fila()
 
 def selecionar_pdfs():
     arquivos = filedialog.askopenfilenames(filetypes=[("Arquivos PDF", "*.pdf")])
@@ -110,6 +129,16 @@ def selecionar_pdfs():
         for arquivo in arquivos:
             if arquivo not in lista_pdfs.get(0, tk.END):
                 lista_pdfs.insert(tk.END, arquivo)
+
+def selecionar_pasta():
+    pasta = filedialog.askdirectory()
+    if pasta:
+        for raiz, _, arquivos in os.walk(pasta):
+            for nome in arquivos:
+                if nome.endswith(".pdf"):
+                    caminho = os.path.join(raiz, nome)
+                    if caminho not in lista_pdfs.get(0, tk.END):
+                        lista_pdfs.insert(tk.END, caminho)
 
 def remover_pdf():
     try:
@@ -124,8 +153,8 @@ def salvar_em():
         entrada_saida.delete(0, tk.END)
         entrada_saida.insert(0, pasta)
 
-# === INTERFACE PRINCIPAL ===
-janela = ttk.Window(themename=temas_disponiveis[tema_atual])
+# === INTERFACE ===
+janela = ttk.Window(themename=temas_disponíveis[tema_atual])
 janela.title("🔍 Filtro de PDFs")
 janela.geometry("700x600")
 janela.minsize(600, 500)
@@ -139,7 +168,7 @@ ttk.Label(frame_superior, text="📄 Filtro de PDFs", font=("Arial", 14, "bold")
 frame_tema = ttk.Frame(janela)
 frame_tema.pack(pady=5)
 ttk.Label(frame_tema, text="🎨 Escolha um tema:", font=("Arial", 12)).pack(side="left", padx=5)
-combobox_temas = ttk.Combobox(frame_tema, values=list(temas_disponiveis.keys()), state="readonly")
+combobox_temas = ttk.Combobox(frame_tema, values=list(temas_disponíveis.keys()), state="readonly")
 combobox_temas.pack(side="left", padx=5)
 combobox_temas.set(tema_atual)
 combobox_temas.bind("<<ComboboxSelected>>", mudar_tema)
@@ -169,10 +198,10 @@ entrada_numero.pack(side="left", padx=5)
 frame_botoes = ttk.Frame(janela)
 frame_botoes.pack()
 ttk.Button(frame_botoes, text="Selecionar PDFs", command=selecionar_pdfs).pack(side=tk.LEFT, padx=5)
+ttk.Button(frame_botoes, text="Selecionar Pasta", command=selecionar_pasta).pack(side=tk.LEFT, padx=5)
 ttk.Button(frame_botoes, text="Remover Selecionado", command=remover_pdf).pack(side=tk.LEFT, padx=5)
 
 ttk.Button(janela, text="📥 Buscar e Salvar PDFs 📤", command=buscar_em_multiplos_pdfs).pack(pady=20)
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
     janela.mainloop()
