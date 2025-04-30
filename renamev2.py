@@ -18,7 +18,7 @@ def verificar_nome_arquivo(nome_arquivo):
     tipo, codigo, matricula, cpf, data = partes
 
     # Verificar tipo
-    if tipo != "TERMO DE ÉTICA":
+    if tipo != "TELEGRAMA":
         erros.append(f"Erro no início: Deve começar com 'TERMO DE ÉTICA', mas veio '{tipo}'.")
 
     # 🔧 ALTERAÇÃO AQUI: garantir que o código tenha exatamente 2 dígitos
