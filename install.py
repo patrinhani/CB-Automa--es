@@ -16,7 +16,7 @@ def install_package(package):
         print(f"❌ Erro ao instalar {package}")
 
 # Lista de pacotes
-packages = ["numpy", "scikit-learn", "openai", "ttkbootstrap", "fitz", "pymupdf","selenium", "pyinstaller","pandas","openpyxl","extract_msg","msg-extractor"]
+packages = ["numpy", "scikit-learn", "openai", "ttkbootstrap", "fitz", "pymupdf","selenium", "pyinstaller","pandas","openpyxl","extract_msg","msg-extractor","PyPDF2"]
 
 # Desinstalar pacotes
 print("\n🔻 Desinstalando pacotes...\n")
