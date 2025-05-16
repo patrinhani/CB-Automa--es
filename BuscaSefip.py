@@ -12,7 +12,7 @@ class CompressorApp:
     def __init__(self, master):
         self.master = master
         self.master.title("Sefip")
-        tb.Style(theme="solar")
+        tb.Style(theme="vapor")
 
         self.source_dir = None
         self.target_dir = None
