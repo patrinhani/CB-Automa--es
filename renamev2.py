@@ -19,7 +19,7 @@ def verificar_nome_arquivo(nome_arquivo):
 
     # Verificar tipo
     if tipo != "TELEGRAMA":
-        erros.append(f"Erro no início: Deve começar com 'TERMO DE ÉTICA', mas veio '{tipo}'.")
+        erros.append(f"Erro no início: Deve começar com '{nome_arquivo}', mas veio '{tipo}'.")
 
     # 🔧 ALTERAÇÃO AQUI: garantir que o código tenha exatamente 2 dígitos
     if not codigo.isdigit():
