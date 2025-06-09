@@ -41,9 +41,9 @@ palavras_chave = [
 ]
  
 # Caminhos das pastas e arquivo de saída.
-pasta_principal = r"C:\Users\2160036544\Downloads\Arquivos_Descompactados\2160036544---N-64342692----30-05-2025-16-56-01"
-saida_excel = r"C:\Users\2160036544\Downloads\Arquivos_Descompactados"
- 
+pasta_principal = r"C:\Users\2160036544\Downloads\Arquivos_Descompactados\2160036544---N-64463956----02-06-2025-19-49-05"
+saida_excel = r"C:\Users\2160036544\Downloads\Arquivos_Descompactados\2160036544---N-64463956----02-06-2025-19-49-05\resultados.xlsx"
+
 # Cria a pasta para PDFs encontrados se ela não existir.
 pasta_encontrados = os.path.join(pasta_principal, "Encontrados")
 os.makedirs(pasta_encontrados, exist_ok=True)
