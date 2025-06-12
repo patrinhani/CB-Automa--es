@@ -1,195 +1,147 @@
 import os
 import shutil
-import fitz # Importado para extrair texto de PDFs
-import pandas as pd
-from pdf2image import convert_from_path
-import easyocr
+import fitz  # PyMuPDF
+import pytesseract
+import cv2
 import numpy as np
-from fuzzywuzzy import fuzz
-import unicodedata
-import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
- 
-# --- Configuração de Logging ---
-# Configura o sistema de log para mostrar informações no console.
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
- 
-# --- Configurações Principais ---
-# Inicializa o leitor EasyOCR uma única vez para português, sem usar GPU.
-# Isso economiza tempo e recursos.
-reader = easyocr.Reader(['pt'], gpu=False)
- 
-# Caminho para o executável Poppler. Essencial para o pdf2image funcionar.
-poppler_path = r"C:\Users\2160036544\Downloads\Release-24.08.0-0\poppler-24.08.0\Library\bin"
- 
-# Lista de palavras-chave a serem buscadas nos documentos.
-palavras_chave = [
-    "adesão de beneficios no processo admissional",
-    "solicitação de transporte",
-    "inclusão, solicitação e cancelamento vale transporte via varejo",
-    "Extrato de beneficios",
-    "Vale transporte",
-    "Adesao",
-    "RH - CONTRATO DE TRABALHO - ADESAO",
-    "EXCLUSAO DO VALE TRANSPORTE",
-    "RH - ANEXOS",
-    "RH - BENEFICIOS",
-    "RH - CONTRATO DE TRABALHO - ADESAO",
-    "Adesão de Benefícios no Processo Admissional Via Varejo e VVLOG",
-    "Alteração, Inclusão e Exclusão de vale transporte",
-]
- 
-# Caminhos das pastas e arquivo de saída.
-pasta_principal = r"C:\Users\2160036544\Downloads\Arquivos_Descompactados\2160036544---N-64463956----02-06-2025-19-49-05"
-saida_excel = r"C:\Users\2160036544\Downloads\Arquivos_Descompactados\2160036544---N-64463956----02-06-2025-19-49-05\resultados.xlsx"
+from PIL import Image
+from pdf2image import convert_from_path
+import concurrent.futures
+import time
 
-# Cria a pasta para PDFs encontrados se ela não existir.
-pasta_encontrados = os.path.join(pasta_principal, "Encontrados")
-os.makedirs(pasta_encontrados, exist_ok=True)
- 
-# Lista para armazenar os resultados do processamento de cada PDF.
-resultados = []
- 
-# --- Funções Auxiliares ---
-def normalizar(texto):
+# ----------------------- CONFIGURAÇÕES -----------------------
+# Configure os caminhos de acordo com a sua máquina.
+
+# 📌 Aponta para o executável do Tesseract.
+# Use o caminho da sua instalação.
+pytesseract.pytesseract.tesseract_cmd = r'C:\Users\2160036544\Downloads\tesseract-5.5.1\tesseract.exe'
+
+# 📌 Aponta para a pasta 'bin' do Poppler.
+# Use o caminho da sua instalação.
+POPPLER_PATH = r'C:\Users\2160036544\Downloads\Release-24.08.0-0\poppler-24.08.0\Library\bin'
+
+# 📂 Caminho para a pasta que contém as subpastas dos funcionários.
+CAMINHO_LOTE = r"C:\Users\2160036544\Downloads\SavedDocument\lote1" # <-- ALTERE PARA O CAMINHO REAL
+
+# 📁 Pasta onde os documentos classificados serão salvos.
+PASTA_ANEXO = os.path.join(CAMINHO_LOTE, "Lote - Anexo (Classificado)")
+os.makedirs(PASTA_ANEXO, exist_ok=True)
+
+# 🔑 Palavras-chave para classificação dos documentos.
+PALAVRAS_CHAVE = {
+    "ASO A": ["exame admissional"],
+    "ASO D": ["exame demissional"],
+    "ASO P": ["exame periódico"],
+    "Contrato de Trabalho": ["contrato", "acordo", "compensação", "prorrogação", "bh", "docs. admissionais", "termo", "termos", "ficha de registro"],
+    "Formulário de atualização de CTPS": ["ficha de anotações", "atualizações da ctps"],
+    "TRCT Homologado": ["trct", "guia do seguro", "grrf", "fgts", "extrato analítico", "comprovante de crédito em conta corrente"],
+    "Comunicado de Aviso de Férias": ["aviso de férias"],
+    "Comunicado De Dispensa": ["telegramas", "contato sms", "e-mail", "whatsapp", "pedido", "aviso de desligamento", "término de contrato", "justa causa", "óbito", "falecimento"]
+}
+
+# ---------------------- FUNÇÕES AUXILIARES ----------------------
+
+def extrair_texto(pdf_path):
     """
-    Normaliza o texto removendo acentos, convertendo para minúsculas
-    e retirando caracteres especiais.
-    """
-    texto = unicodedata.normalize('NFD', texto)
-    texto = texto.encode('ascii', 'ignore').decode('utf-8')
-    texto = re.sub(r'[^a-zA-Z0-9\s]', '', texto)
-    return texto.lower().strip()
- 
-def contem_palavra_chave(texto_normalizado):
-    """
-    Verifica se o texto normalizado contém alguma das palavras-chave
-    usando a correspondência fuzzy (similaridade parcial).
-    Um limiar de 85 significa que 85% do texto da chave deve corresponder.
-    """
-    for chave in palavras_chave:
-        chave_norm = normalizar(chave)
-        if fuzz.partial_ratio(chave_norm, texto_normalizado) >= 85:
-            return True
-    return False
- 
-def extrair_texto_fitz(caminho_pdf):
-    """
-    Tenta extrair texto diretamente de um PDF usando PyMuPDF (Fitz).
-    É muito mais rápido para PDFs com camada de texto.
-    """
-    texto = ""
-    try:
-        doc = fitz.open(caminho_pdf)
-        for page in doc:
-            texto += page.get_text() # Extrai texto da página
-        doc.close()
-        return normalizar(texto)
-    except Exception as e:
-        # Se ocorrer um erro (ex: PDF corrompido, protegido), registre e retorne None.
-        # Nível DEBUG para não poluir o console com erros esperados de PDFs sem texto.
-        logging.debug(f"Erro ao extrair texto com Fitz de {caminho_pdf}: {e}")
-        return None # Indica que Fitz não conseguiu extrair texto ou houve um erro
- 
-def extrair_texto_easyocr(caminho_pdf):
-    """
-    Extrai texto de um PDF usando EasyOCR após converter as páginas em imagens.
-    Usado para PDFs que são primariamente imagens (escaneados).
-    O DPI (Dots Per Inch) afeta a qualidade da imagem e o consumo de recursos.
-    Valores como 150 ou 120 podem ser mais leves que 200, mas teste a precisão.
-    """
-    texto_total = ""
-    try:
-        # Tente 150 ou 120 DPI para menos consumo de recursos,
-        # mas verifique se a precisão do OCR se mantém.
-        imagens = convert_from_path(caminho_pdf, dpi=150, poppler_path=poppler_path)
-        for img in imagens:
-            # Converte a imagem para um array numpy e passa para o EasyOCR.
-            resultado = reader.readtext(np.array(img), detail=0)
-            texto_total += " ".join(resultado) + " "
-    except Exception as e:
-        logging.error(f"Erro na conversão OCR de {caminho_pdf}: {e}")
-    return normalizar(texto_total)
- 
-def processar_pdf(caminho_pdf):
-    """
-    Função principal para processar um único PDF.
-    Primeiro tenta extração de texto com Fitz, se falhar, usa EasyOCR.
+    Extrai texto de um PDF, usando OCR otimizado com OpenCV se necessário.
     """
     try:
-        nome_arquivo = os.path.basename(caminho_pdf)
-        pasta_matricula = os.path.basename(os.path.dirname(caminho_pdf))
- 
-        # --- Otimização: Filtro Inicial por Nome do Arquivo ---
-        # Ignora PDFs que provavelmente não contêm as palavras-chave com base no nome.
-        # Isso evita processamento pesado (OCR) em arquivos irrelevantes.
-        if not any(x in normalizar(nome_arquivo) for x in ["contrato de trabalho - adesao", "extrato de beneficios", "vale transporte", "beneficio", "adesao", "rh - anexos", "rh - beneficios","rh - contrato de trabalho - adesao"]):
-            return [pasta_matricula, "Ignorado (Filtrado por Nome)", caminho_pdf]
- 
-        # --- Estratégia Híbrida: Tentar Fitz Primeiro ---
-        texto_extraido_fitz = extrair_texto_fitz(caminho_pdf)
-        if texto_extraido_fitz and contem_palavra_chave(texto_extraido_fitz):
-            status = "Encontrado (via Fitz)"
-            destino = os.path.join(pasta_encontrados, nome_arquivo)
-            shutil.copy2(caminho_pdf, destino)
-            logging.info(f"Copiado: {caminho_pdf} para {destino}")
-            return [pasta_matricula, status, caminho_pdf]
- 
-        # --- Recorrer ao EasyOCR se Fitz falhar ou não encontrar ---
-        # Isso significa que o PDF é uma imagem ou o texto não foi detectável por Fitz.
-        logging.info(f"Fitz não encontrou ou não conseguiu ler, usando OCR para: {nome_arquivo}")
-        texto_extraido_ocr = extrair_texto_easyocr(caminho_pdf)
-        achou_ocr = contem_palavra_chave(texto_extraido_ocr)
-        status = "Encontrado (via OCR)" if achou_ocr else "Não encontrado"
- 
-        if achou_ocr:
-            destino = os.path.join(pasta_encontrados, nome_arquivo)
-            shutil.copy2(caminho_pdf, destino)
-            logging.info(f"Copiado: {caminho_pdf} para {destino}")
- 
-        return [pasta_matricula, status, caminho_pdf]
- 
+        texto_extraido = ""
+        with fitz.open(pdf_path) as doc:
+            for page in doc:
+                texto_extraido += page.get_text("text", flags=fitz.TEXT_INHIBIT_SPACES).lower()
+        
+        if not texto_extraido.strip():
+            # DPI reduzido para 200 para acelerar a conversão
+            imagens_pil = convert_from_path(pdf_path, dpi=200, poppler_path=POPPLER_PATH)
+            
+            for pil_image in imagens_pil:
+                # --- OTIMIZAÇÃO COM OPENCV ---
+                # 1. Converte para formato OpenCV e escala de cinza
+                imagem_cv = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2GRAY)
+                # 2. Binariza a imagem (preto e branco) para melhorar o contraste
+                _, imagem_processada = cv2.threshold(imagem_cv, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                # --- FIM DA OTIMIZAÇÃO ---
+                
+                texto_extraido += pytesseract.image_to_string(imagem_processada, lang='por').lower()
+                
+        return texto_extraido
     except Exception as e:
-        logging.error(f"Erro geral ao processar {caminho_pdf}: {e}", exc_info=True) # exc_info=True para detalhes do erro
-        return [os.path.basename(os.path.dirname(caminho_pdf)), f"Erro: {e}", caminho_pdf]
- 
-# --- Função Principal de Busca ---
-def buscar_com_threads(pasta):
+        print(f"❌ Erro ao extrair texto de {os.path.basename(pdf_path)}: {e}")
+        return ""
+
+def classificar_documento(matricula_nome, pdf_path, texto):
     """
-    Percorre o diretório, encontra todos os PDFs e os processa
-    usando um pool de threads para paralelização.
+    Classifica um documento e copia para a pasta de destino.
     """
-    pdfs = []
-    for raiz, _, arquivos in os.walk(pasta):
-        for arquivo in arquivos:
-            if arquivo.lower().endswith('.pdf'):
-                pdfs.append(os.path.join(raiz, arquivo))
- 
-    logging.info(f"🔍 Total de PDFs a processar: {len(pdfs)}")
- 
-    # Otimização: Define o número de threads para um valor ideal para o seu CPU (4 núcleos).
-    # Isso evita sobrecarga e mantém o sistema responsivo.
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = [executor.submit(processar_pdf, pdf) for pdf in pdfs]
-        for i, future in enumerate(as_completed(futures)):
-            try:
-                resultado = future.result()
-                resultados.append(resultado)
-                # Relata o progresso a cada 10 arquivos ou ao final.
-                if (i + 1) % 10 == 0 or (i + 1) == len(pdfs):
-                    logging.info(f"Progresso: {i + 1}/{len(pdfs)} PDFs processados. Último: {resultado[0]} - {resultado[1]}")
-            except Exception as e:
-                logging.error(f"Erro ao obter resultado de uma thread: {e}", exc_info=True)
- 
-# --- Execução do Script ---
+    encontrados = set() # Usar um 'set' evita categorias duplicadas
+    for categoria, palavras in PALAVRAS_CHAVE.items():
+        if any(palavra in texto for palavra in palavras):
+            encontrados.add(categoria)
+    
+    if encontrados:
+        for tipo in encontrados:
+            nome_pasta_destino = f"{matricula_nome.split('-')[0].strip()} - {tipo}"
+            pasta_destino = os.path.join(PASTA_ANEXO, nome_pasta_destino)
+            os.makedirs(pasta_destino, exist_ok=True)
+            shutil.copy2(pdf_path, pasta_destino)
+        # Imprime apenas uma vez por arquivo, com todas as suas categorias
+        print(f"📎 Classificado: {os.path.basename(pdf_path)} ➤ {list(encontrados)}")
+    else:
+        print(f"🟡 Ignorado (sem palavra-chave): {os.path.basename(pdf_path)}")
+
+def processar_um_arquivo(args):
+    """
+    Função que encapsula o trabalho para um único arquivo, para ser usada em paralelo.
+    """
+    pasta_matricula, arquivo, caminho_completo_pasta = args
+    caminho_pdf = os.path.join(caminho_completo_pasta, arquivo)
+    texto = extrair_texto(caminho_pdf)
+    if texto:
+        classificar_documento(pasta_matricula, caminho_pdf, texto)
+
+# ------------------------ EXECUÇÃO PRINCIPAL ------------------------
+
+def main():
+    """
+    Função principal que orquestra todo o processo de forma paralela.
+    """
+    inicio = time.time()
+    print("🚀 Iniciando automação de classificação de prontuários (versão otimizada)...")
+    
+    if not os.path.exists(CAMINHO_LOTE):
+        print(f"❌ ERRO: Caminho do lote não encontrado em '{CAMINHO_LOTE}'")
+        return
+
+    subpastas_matricula = [d for d in os.listdir(CAMINHO_LOTE) if os.path.isdir(os.path.join(CAMINHO_LOTE, d)) and not d.startswith("Lote - Anexo")]
+
+    if not subpastas_matricula:
+        print("⚠️ Nenhuma subpasta de matrícula encontrada para processar.")
+        return
+
+    # 1. Monta uma lista com todas as tarefas (todos os arquivos a processar)
+    tarefas = []
+    for pasta in subpastas_matricula:
+        caminho_pasta = os.path.join(CAMINHO_LOTE, pasta)
+        for arquivo in os.listdir(caminho_pasta):
+            if arquivo.lower().endswith(".pdf"):
+                tarefas.append((pasta, arquivo, caminho_pasta))
+    
+    if not tarefas:
+        print("⚠️ Nenhum arquivo PDF encontrado em nenhuma das subpastas.")
+        return
+        
+    print(f"✅ Encontrados {len(tarefas)} arquivos PDF para processar em {len(subpastas_matricula)} pastas.")
+    print("...Iniciando processamento em paralelo...")
+
+    # 2. Executa as tarefas em paralelo, usando todos os núcleos do processador
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        executor.map(processar_um_arquivo, tarefas)
+    
+    fim = time.time()
+    duracao = fim - inicio
+    print("\n✅ Processo finalizado.")
+    print(f"⏱️ Tempo total de execução: {duracao:.2f} segundos.")
+
 if __name__ == "__main__":
-    logging.info("Iniciando a busca otimizada de documentos...")
-    buscar_com_threads(pasta_principal)
- 
-    # Cria um DataFrame do pandas com os resultados e salva em Excel.
-    df = pd.DataFrame(resultados, columns=["Matrícula", "Status", "Caminho"])
-    df.to_excel(saida_excel, index=False)
- 
-    logging.info("✅ Busca otimizada finalizada.")
-    logging.info(f"📁 Planilha de resultados gerada em: {saida_excel}")
+    main()

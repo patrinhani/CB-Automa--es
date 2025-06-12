@@ -16,7 +16,7 @@ def install_package(package):
         print(f"❌ Erro ao instalar {package}")
 
 # Lista de pacotes
-packages = ["pdf2image","easyocr"]
+packages = ["yake"]
 
 # Desinstalar pacotes
 print("\n🔻 Desinstalando pacotes...\n") 
