@@ -1,0 +1,125 @@
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+import time
+import logging
+from datetime import datetime
+import os
+import json
+
+# ========== CONFIGURAÇÃO (sem alterações) ==========
+log_filename = f"automacao_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s", datefmt="%H:%M:%S", filename=log_filename, filemode="w")
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s", datefmt="%H:%M:%S"))
+logging.getLogger().addHandler(console_handler)
+logging.info(f"Todos os logs detalhados serão salvos em: {log_filename}")
+
+download_directory = r"C:\Users\2160036544\Downloads\Automacao_Arquivos"
+if not os.path.exists(download_directory):
+    os.makedirs(download_directory)
+
+def run(playwright):
+    browser = None
+    try:
+        browser = playwright.chromium.launch(headless=False, args=["--start-maximized"])
+        context = browser.new_context(no_viewport=True, accept_downloads=True)
+        page = context.new_page()
+
+        # ETAPAS DE LOGIN E BUSCA (sem alterações)
+        logging.info("Acessando a página de login com Playwright...")
+        page.goto("https://im40333.onbaseonline.com/203appnet/Login.aspx")
+
+        logging.info("Realizando login...")
+        page.locator('xpath=/html/body/form/div[3]/div/div[2]/table/tbody/tr[1]/td[2]/input').fill("60036544")
+        page.locator('xpath=/html/body/form/div[3]/div/div[2]/table/tbody/tr[3]/td[2]/input').fill("12345678")
+        page.locator('xpath=/html/body/form/div[3]/div/div[2]/table/tbody/tr[5]/td[2]/button').click()
+        
+        logging.info("Navegando no menu...")
+        nav_frame = page.frame_locator("#NavPanelIFrame")
+        nav_frame.locator('xpath=/html/body/form/div[2]/div[1]/div/div/div/div[1]/div//input').fill("ANEXOS")
+        time.sleep(1)
+        nav_frame.locator('xpath=/html/body/form/div[2]/div[1]/div/div/div/div[3]/div[1]/ul/li[5]/label').click()
+        
+        logging.info("Preenchendo campo de matrícula...")
+        nav_frame.locator("div[keywordtypeid='114'] input.keywordInput").fill("2469189")
+        
+        logging.info("Clicando em pesquisar...")
+        nav_frame.locator("button.js-searchButton:has-text('Pesquisar')").click()
+
+        logging.info("Aguardando quadro de resultados...")
+        viewer_frame = page.frame_locator("#frmViewer")
+        results_frame = viewer_frame.frame_locator("#frameDocSelect")
+
+        logging.info("Aguardando tabela de resultados...")
+        first_row = results_frame.locator("table#primaryHitlist_grid tbody tr[role='row']").first
+        first_row.wait_for(state="visible", timeout=60000)
+        logging.info("Tabela de resultados carregada.")
+        
+        # ETAPA DE SELEÇÃO E DOWNLOAD (sem alterações)
+        all_rows = results_frame.locator("table#primaryHitlist_grid tbody tr[role='row']").all()
+        if not all_rows:
+            logging.error("Nenhum documento encontrado na tabela para selecionar.")
+            return
+
+        logging.info(f"Encontrados {len(all_rows)} documentos. Selecionando todos...")
+        all_rows[0].click() 
+        time.sleep(0.2)
+        for i, row in enumerate(all_rows[1:]):
+            row.click(modifiers=["Control"])
+            time.sleep(0.1) 
+        
+        logging.info("Abrindo menu de contexto para a seleção completa...")
+        all_rows[-1].click(button="right")
+        
+        page.locator("li.contextMenuItem:has-text('Enviar para')").hover()
+        time.sleep(0.5)
+        
+        logging.info("Aguardando a abertura do diálogo popup...")
+        with context.expect_page() as popup_info:
+            logging.info("Clicando em 'Arquivo' para abrir a nova janela...")
+            page.get_by_role("menuitem", name="Arquivo", exact=True).click()
+            
+        popup_page = popup_info.value
+        popup_page.wait_for_load_state()
+        logging.info(f"Sucesso! Janela popup capturada com o título: '{popup_page.title()}'")
+        
+        format_selector = popup_page.locator("#selectContent")
+        format_selector.wait_for(state="visible", timeout=30000)
+        logging.info("Selecionando formato 'PDF (.pdf)'...")
+        format_selector.select_option(value="pdf")
+        time.sleep(1)
+        
+        logging.info("Aguardando o início do download...")
+        with popup_page.expect_download(timeout=90000) as download_info:
+            logging.info("Clicando no botão 'Salvar' do popup...")
+            popup_page.locator("#btnSave").click()
+            
+        download = download_info.value
+        download_path = os.path.join(download_directory, download.suggested_filename)
+        
+        logging.info(f"O download do arquivo '{download.suggested_filename}' foi iniciado. Aguardando a conclusão...")
+        download.save_as(download_path)
+        logging.info(f"Comando para salvar em '{download_path}' foi concluído.")
+
+        # --- NOVA ETAPA: VERIFICAÇÃO DO DOWNLOAD ---
+        logging.info("Verificando se o arquivo foi salvo corretamente...")
+        time.sleep(2) # Pequena pausa para o sistema de arquivos finalizar a escrita
+
+        if os.path.exists(download_path) and os.path.getsize(download_path) > 0:
+            logging.info(f"VERIFICAÇÃO CONCLUÍDA: O arquivo '{os.path.basename(download_path)}' foi baixado com sucesso e não está vazio.")
+        else:
+            logging.error(f"FALHA NA VERIFICAÇÃO: O arquivo '{os.path.basename(download_path)}' não foi encontrado ou está vazio.")
+            raise Exception("Falha na verificação final do download.")
+
+    except PlaywrightTimeoutError as e:
+        logging.error(f"FALHA: Ocorreu um Timeout esperando por um elemento ou pelo download. Erro: {e}")
+    except Exception as e:
+        logging.error(f"Ocorreu um erro inesperado: {e}", exc_info=True)
+    finally:
+        if 'browser' in locals() and browser:
+            browser.close()
+        logging.info("Script finalizado.")
+
+# Bloco principal para rodar a função
+with sync_playwright() as playwright:
+    run(playwright)
